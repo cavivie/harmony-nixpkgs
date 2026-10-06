@@ -1,0 +1,40 @@
+name: Check
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: cachix/install-nix-action@v31
+      - run: nix flake check --all-systems --no-build
+
+  build-linux-x64:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    env:
+      HARMONYOS_SOURCE_URL: ${{ secrets.HARMONYOS_LINUX_X64_URL }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: cachix/install-nix-action@v31
+      - name: Report unavailable source
+        if: env.HARMONYOS_SOURCE_URL == ''
+        run: echo '::notice::Binary checks require the HARMONYOS_LINUX_X64_URL repository secret.'
+      - name: Import official archive
+        if: env.HARMONYOS_SOURCE_URL != ''
+        run: |
+          test -n "$HARMONYOS_SOURCE_URL"
+          nix store prefetch-file \
+            --name commandline-tools-linux-x64-26.0.0.851.zip \
+            "$HARMONYOS_SOURCE_URL" >/dev/null
+      - if: env.HARMONYOS_SOURCE_URL != ''
+        run: nix build .#sdk
+      - if: env.HARMONYOS_SOURCE_URL != ''
+        run: nix develop --command sh -c 'hvigorw -v && ohpm --version && hdc --version'

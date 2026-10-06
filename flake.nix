@@ -1,0 +1,122 @@
+{
+  description = "Nix-packaged HarmonyOS SDK and command-line tools";
+
+  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
+
+  outputs =
+    { self, nixpkgs }:
+    let
+      systems = [
+        "aarch64-darwin"
+        "aarch64-linux"
+        "x86_64-linux"
+      ];
+      forAllSystems = nixpkgs.lib.genAttrs systems;
+      releases = import ./nix/releases.nix;
+      latestVersion = "26.0.0.851";
+
+      packageSetFor =
+        system:
+        let
+          pkgs = import nixpkgs {
+            inherit system;
+            config.allowUnfree = true;
+          };
+          release = releases.${latestVersion};
+          componentOutputs = pkgs.callPackage ./nix/release.nix { inherit release; };
+          componentView =
+            name:
+            pkgs.runCommand "harmonyos-${name}-${release.commandLineToolsVersion}" { } ''
+              mkdir -p "$out/sdk/default"
+              ln -s ${componentOutputs.sdk}/default/${name} "$out/sdk/default/${name}"
+            '';
+          sdkPackages = {
+            command-line-tools = componentOutputs.tools;
+            openharmony-sdk = componentView "openharmony";
+            hms-sdk = componentView "hms";
+          };
+          mkSdk = pkgs.callPackage ./nix/mk-sdk.nix { inherit release; };
+          sdk = componentsFn: mkSdk (componentsFn sdkPackages);
+          fullSdk = sdk (components: builtins.attrValues components);
+          versionSlug = builtins.replaceStrings [ "." ] [ "-" ] release.commandLineToolsVersion;
+        in
+        {
+          inherit
+            pkgs
+            release
+            sdkPackages
+            sdk
+            fullSdk
+            versionSlug
+            ;
+        };
+    in
+    {
+      lib = {
+        inherit releases latestVersion;
+        supportedSystems = systems;
+      };
+
+      sdk = forAllSystems (system: (packageSetFor system).sdk);
+
+      overlays.default = final: _prev: {
+        harmonySdkPackages = (packageSetFor final.system).sdkPackages;
+        harmonySdk = (packageSetFor final.system).sdk;
+      };
+
+      packages = forAllSystems (
+        system:
+        let
+          packageSet = packageSetFor system;
+        in
+        packageSet.sdkPackages
+        // {
+          sdk = packageSet.fullSdk;
+          "sdk-${packageSet.versionSlug}" = packageSet.fullSdk;
+          "command-line-tools-${packageSet.versionSlug}" = packageSet.sdkPackages.command-line-tools;
+          "openharmony-sdk-${packageSet.versionSlug}" = packageSet.sdkPackages.openharmony-sdk;
+          "hms-sdk-${packageSet.versionSlug}" = packageSet.sdkPackages.hms-sdk;
+          default = packageSet.fullSdk;
+        }
+      );
+
+      devShells = forAllSystems (
+        system:
+        let
+          packageSet = packageSetFor system;
+        in
+        {
+          default = packageSet.pkgs.mkShellNoCC {
+            packages = [ packageSet.fullSdk ];
+          };
+        }
+      );
+
+      checks = forAllSystems (
+        system:
+        let
+          packageSet = packageSetFor system;
+        in
+        {
+          sdk-layout = packageSet.pkgs.runCommand "check-harmonyos-sdk-layout" { } ''
+            test -x ${packageSet.fullSdk}/bin/hvigorw
+            test -x ${packageSet.fullSdk}/bin/ohpm
+            test -x ${packageSet.fullSdk}/bin/hdc
+            test -x ${packageSet.fullSdk}/sdk/default/openharmony/native/llvm/bin/clang
+            test -f ${packageSet.fullSdk}/sdk/default/hms/ets/uni-package.json
+            touch "$out"
+          '';
+          sdk-tools = packageSet.pkgs.runCommand "check-harmonyos-sdk-tools" { } ''
+            source ${packageSet.fullSdk}/nix-support/setup-hook
+            hvigorw -v
+            ohpm --version
+            hdc --version
+            aarch64-unknown-linux-ohos-clang --version
+            touch "$out"
+          '';
+        }
+      );
+
+      formatter = forAllSystems (system: (packageSetFor system).pkgs.nixfmt-tree);
+    };
+}
