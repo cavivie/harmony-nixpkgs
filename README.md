@@ -42,17 +42,25 @@ official distribution archive.
 
 Huawei distributes these archives through account-bound signed URLs. Such URLs
 are credentials and must not be committed to source control, Nix derivations or
-CI logs. Download the archive for your host from Huawei Developer and import it
-under the manifest's canonical name:
+CI logs. Download the archive for your host from Huawei Developer, then run the
+repository-owned installer:
 
 ```bash
-nix store add --mode flat \
-  --name commandline-tools-mac-arm64-26.0.0.851.zip \
+nix run github:cavivie/harmony-nixpkgs#install-sdk -- \
   ~/Downloads/commandline-tools-mac-arm64-26.0.0.851.zip
 ```
 
-Nix verifies the imported file against the SHA-256 in the release manifest.
-The default package is then the complete SDK:
+The installer selects the manifest entry for the current host, verifies its
+SHA-256 and imports it under the canonical Nix store name. A version-specific
+entry point is retained with every release:
+
+```bash
+nix run github:cavivie/harmony-nixpkgs#install-sdk-26-0-0-851 -- <archive>
+```
+
+The underlying operation is `nix store add --mode flat --name <name> <archive>`;
+the installer provides the host selection and integrity checks around it. The
+default package is then the complete SDK:
 
 ```bash
 nix develop github:cavivie/harmony-nixpkgs

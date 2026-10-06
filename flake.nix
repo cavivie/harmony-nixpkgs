@@ -39,6 +39,10 @@
           sdk = componentsFn: mkSdk (componentsFn sdkPackages);
           fullSdk = sdk (components: builtins.attrValues components);
           versionSlug = builtins.replaceStrings [ "." ] [ "-" ] release.commandLineToolsVersion;
+          installer = pkgs.callPackage ./nix/install-sdk.nix {
+            inherit release system;
+            source = release.sources.${system};
+          };
         in
         {
           inherit
@@ -47,6 +51,7 @@
             sdkPackages
             sdk
             fullSdk
+            installer
             versionSlug
             ;
         };
@@ -76,7 +81,25 @@
           "command-line-tools-${packageSet.versionSlug}" = packageSet.sdkPackages.command-line-tools;
           "openharmony-sdk-${packageSet.versionSlug}" = packageSet.sdkPackages.openharmony-sdk;
           "hms-sdk-${packageSet.versionSlug}" = packageSet.sdkPackages.hms-sdk;
+          install-sdk = packageSet.installer;
+          "install-sdk-${packageSet.versionSlug}" = packageSet.installer;
           default = packageSet.fullSdk;
+        }
+      );
+
+      apps = forAllSystems (
+        system:
+        let
+          packageSet = packageSetFor system;
+          app = {
+            type = "app";
+            program = "${packageSet.installer}/bin/harmonyos-sdk-install";
+            meta.description = "Import an official HarmonyOS SDK archive into the Nix store";
+          };
+        in
+        {
+          install-sdk = app;
+          "install-sdk-${packageSet.versionSlug}" = app;
         }
       );
 
@@ -98,6 +121,15 @@
           packageSet = packageSetFor system;
         in
         {
+          installer = packageSet.pkgs.runCommand "check-harmonyos-sdk-installer" { } ''
+            ${packageSet.installer}/bin/harmonyos-sdk-install --help > "$out"
+            touch invalid-archive.zip
+            if ${packageSet.installer}/bin/harmonyos-sdk-install invalid-archive.zip > installer.log 2>&1; then
+              echo "installer accepted an invalid archive" >&2
+              exit 1
+            fi
+            grep -q "archive checksum does not match" installer.log
+          '';
           sdk-layout = packageSet.pkgs.runCommand "check-harmonyos-sdk-layout" { } ''
             test -x ${packageSet.fullSdk}/bin/hvigorw
             test -x ${packageSet.fullSdk}/bin/ohpm
