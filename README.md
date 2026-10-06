@@ -92,7 +92,10 @@ outputs preserve the upstream dependency boundary:
 
 The package set exposes `openharmony-sdk` and `hms-sdk` as lightweight views of
 that payload, so consumers can select components without duplicating the
-archive or introducing cyclic references between upstream SDK libraries.
+archive or introducing cyclic references between upstream SDK libraries. Every
+composition also includes the release-level `sdk-pkg.json` descriptor required
+by Hvigor to discover the SDK version; this metadata belongs to the composed
+SDK rather than either selectable component.
 
 The composed package is:
 

@@ -4,6 +4,7 @@
   writeText,
   lndir,
   release,
+  sdkMetadata,
 }:
 
 components:
@@ -31,7 +32,8 @@ runCommand "harmonyos-sdk-${release.commandLineToolsVersion}"
     };
   }
   ''
-    mkdir -p "$out/bin" "$out/nix-support"
+    mkdir -p "$out/bin" "$out/nix-support" "$out/sdk/default"
+    ln -s ${lib.escapeShellArg sdkMetadata} "$out/sdk/default/sdk-pkg.json"
     for component in ${componentPaths}; do
       lndir -silent "$component" "$out"
     done

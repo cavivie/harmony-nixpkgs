@@ -35,7 +35,10 @@
             openharmony-sdk = componentView "openharmony";
             hms-sdk = componentView "hms";
           };
-          mkSdk = pkgs.callPackage ./nix/mk-sdk.nix { inherit release; };
+          mkSdk = pkgs.callPackage ./nix/mk-sdk.nix {
+            inherit release;
+            sdkMetadata = "${componentOutputs.sdk}/default/sdk-pkg.json";
+          };
           sdk = componentsFn: mkSdk (componentsFn sdkPackages);
           fullSdk = sdk (components: builtins.attrValues components);
           versionSlug = builtins.replaceStrings [ "." ] [ "-" ] release.commandLineToolsVersion;
@@ -134,6 +137,9 @@
             test -x ${packageSet.fullSdk}/bin/hvigorw
             test -x ${packageSet.fullSdk}/bin/ohpm
             test -x ${packageSet.fullSdk}/bin/hdc
+            test -f ${packageSet.fullSdk}/sdk/default/sdk-pkg.json
+            grep -q '"apiVersion": "${toString packageSet.release.apiVersion}"' \
+              ${packageSet.fullSdk}/sdk/default/sdk-pkg.json
             test -x ${packageSet.fullSdk}/sdk/default/openharmony/native/llvm/bin/clang
             test -f ${packageSet.fullSdk}/sdk/default/hms/ets/uni-package.json
             touch "$out"
